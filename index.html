@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>PalmStock — CAM</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f; --surface: #1a1a1a; --surface2: #242424;
+    --border: #2e2e2e; --accent: #e8c547; --accent2: #f0a500;
+    --danger: #ff4d4d; --warn: #ff9f43; --ok: #26de81;
+    --text: #f0ede8; --muted: #888; --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+
+#sync-bar { position: fixed; top: 0; left: 0; right: 0; height: 3px; background: var(–accent); z-index: 999; transform: scaleX(0); transform-origin: left; transition: transform 0.3s ease, opacity 0.3s ease; opacity: 0; }
+#sync-bar.syncing { transform: scaleX(0.7); opacity: 1; }
+#sync-bar.done { transform: scaleX(1); opacity: 0; transition: transform 0.2s, opacity 0.5s 0.3s; }
+
+#conn-badge { position: fixed; bottom: 80px; right: 16px; font-family: ‘DM Mono’, monospace; font-size: 10px; padding: 4px 10px; border-radius: 20px; z-index: 500; transition: all 0.3s; }
+#conn-badge.online  { background: rgba(38,222,129,0.15); color: var(–ok);    border: 1px solid rgba(38,222,129,0.3); }
+#conn-badge.offline { background: rgba(255,77,77,0.15);  color: var(–danger); border: 1px solid rgba(255,77,77,0.3);  }
+
+/* HEADER */
+header {
+background: var(–surface); border-bottom: 1px solid var(–border);
+padding: 12px 20px; position: sticky; top: 0; z-index: 100;
+}
+.header-top {
+display: flex; align-items: center; justify-content: space-between;
+margin-bottom: 6px;
+}
+.logo { font-family: ‘Syne’, sans-serif; font-weight: 800; font-size: 20px; letter-spacing: -0.5px; }
+.logo span { color: var(–accent); }
+.header-stats { display: flex; gap: 12px; }
+.hstat { font-family: ‘DM Mono’, monospace; font-size: 11px; color: var(–muted); text-align: right; line-height: 1.4; }
+.hstat strong { color: var(–text); font-size: 13px; display: block; }
+
+.header-clinic {
+display: flex; align-items: center; justify-content: space-between;
+padding-top: 6px; border-top: 1px solid var(–border);
+}
+.clinic-name {
+font-family: ‘Syne’, sans-serif; font-weight: 700; font-size: 11px;
+color: var(–accent); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.clinic-doctors {
+font-family: ‘DM Mono’, monospace; font-size: 10px; color: var(–muted);
+text-align: right; line-height: 1.6;
+}
+
+nav { display: flex; gap: 4px; padding: 12px 20px; background: var(–surface); border-bottom: 1px solid var(–border); overflow-x: auto; -webkit-overflow-scrolling: touch; }
+nav button { font-family: ‘Syne’, sans-serif; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 8px; border: none; background: transparent; color: var(–muted); cursor: pointer; white-space: nowrap; transition: all 0.2s; }
+nav button.active { background: var(–accent); color: #000; }
+nav button:not(.active):hover { color: var(–text); background: var(–border); }
+
+main { padding: 20px; max-width: 900px; margin: 0 auto; }
+.section { display: none; }
+.section.visible { display: block; }
+
+.card { background: var(–surface); border: 1px solid var(–border); border-radius: var(–radius); padding: 18px; margin-bottom: 14px; }
+.card-title { font-family: ‘Syne’, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.05em; text-transform: uppercase; color: var(–accent); margin-bottom: 14px; }
+
+label { display: block; font-size: 12px; color: var(–muted); margin-bottom: 4px; font-weight: 500; letter-spacing: 0.03em; text-transform: uppercase; }
+input, select, textarea { width: 100%; background: var(–surface2); border: 1px solid var(–border); border-radius: 8px; color: var(–text); font-family: ‘DM Sans’, sans-serif; font-size: 14px; padding: 10px 12px; outline: none; transition: border-color 0.2s; margin-bottom: 12px; -webkit-appearance: none; }
+input:focus, select:focus { border-color: var(–accent); }
+input[type=“month”] { color-scheme: dark; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.btn { font-family: ‘Syne’, sans-serif; font-weight: 700; font-size: 13px; padding: 11px 20px; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; letter-spacing: 0.03em; }
+.btn-primary { background: var(–accent); color: #000; }
+.btn-primary:hover { background: var(–accent2); }
+.btn-danger { background: var(–danger); color: #fff; }
+.btn-outline { background: transparent; border: 1px solid var(–border); color: var(–text); }
+.btn-outline:hover { border-color: var(–accent); color: var(–accent); }
+.btn-sm { padding: 6px 12px; font-size: 11px; }
+.btn-full { width: 100%; }
+
+.material-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(–surface2); border-radius: 8px; margin-bottom: 8px; border: 1px solid var(–border); }
+.mat-info { flex: 1; }
+.mat-name { font-family: ‘Syne’, sans-serif; font-weight: 600; font-size: 14px; }
+.mat-unit { font-size: 11px; color: var(–muted); font-family: ‘DM Mono’, monospace; }
+.mat-stock { display: flex; flex-direction: column; align-items: flex-end; margin-right: 12px; }
+.stock-value { font-family: ‘DM Mono’, monospace; font-size: 16px; font-weight: 500; }
+.stock-label { font-size: 10px; color: var(–muted); }
+.stock-critical { color: var(–danger); } .stock-warn { color: var(–warn); } .stock-ok { color: var(–ok); }
+
+.badge { display: inline-block; font-size: 10px; font-family: ‘DM Mono’, monospace; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+.badge-critical { background: rgba(255,77,77,0.15); color: var(–danger); border: 1px solid rgba(255,77,77,0.3); }
+.badge-warn { background: rgba(255,159,67,0.15); color: var(–warn); border: 1px solid rgba(255,159,67,0.3); }
+.badge-ok { background: rgba(38,222,129,0.15); color: var(–ok); border: 1px solid rgba(38,222,129,0.3); }
+
+.alert-banner { background: rgba(255,77,77,0.1); border: 1px solid rgba(255,77,77,0.3); border-radius: var(–radius); padding: 14px 16px; margin-bottom: 16px; display: none; }
+.alert-banner.visible { display: block; }
+.alert-title { font-family: ‘Syne’, sans-serif; font-weight: 700; font-size: 13px; color: var(–danger); margin-bottom: 6px; }
+.alert-items { font-size: 12px; line-height: 1.8; }
+
+.mat-select-list { max-height: 300px; overflow-y: auto; }
+.mat-row { display: grid; grid-template-columns: 1fr 110px 80px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(–border); }
+.mat-row:last-child { border-bottom: none; }
+.mat-row input { margin-bottom: 0; }
+
+.filter-bar { background: var(–surface); border: 1px solid var(–border); border-radius: var(–radius); padding: 14px 16px; margin-bottom: 14px; }
+.filter-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.filter-tab { font-family: ‘Syne’, sans-serif; font-size: 12px; font-weight: 700; padding: 6px 14px; border-radius: 6px; border: 1px solid var(–border); background: transparent; color: var(–muted); cursor: pointer; transition: all 0.2s; }
+.filter-tab.active { background: var(–accent); color: #000; border-color: var(–accent); }
+.filter-content { display: none; }
+.filter-content.active { display: block; }
+
+.history-item { padding: 12px 14px; background: var(–surface2); border-radius: 8px; margin-bottom: 8px; border-left: 3px solid var(–accent); }
+.history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.history-name { font-family: ‘Syne’, sans-serif; font-weight: 700; font-size: 13px; }
+.history-cost { font-family: ‘DM Mono’, monospace; font-size: 14px; color: var(–accent); font-weight: 500; }
+.history-date { font-size: 11px; color: var(–muted); }
+.history-mats { font-size: 11px; color: var(–muted); margin-top: 4px; line-height: 1.6; }
+
+.summary-box { background: var(–surface2); border: 1px solid var(–border); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+.summary-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(–border); font-size: 13px; }
+.summary-row:last-child { border-bottom: none; }
+.summary-total { display: flex; justify-content: space-between; align-items: center; padding: 10px 0 0; font-family: ‘Syne’, sans-serif; font-weight: 800; font-size: 16px; color: var(–accent); }
+
+.dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.dash-card { background: var(–surface); border: 1px solid var(–border); border-radius: var(–radius); padding: 16px; }
+.dash-number { font-family: ‘Syne’, sans-serif; font-size: 28px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+.dash-label { font-size: 11px; color: var(–muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.empty { text-align: center; padding: 40px 20px; color: var(–muted); font-size: 13px; }
+.empty-icon { font-size: 32px; margin-bottom: 10px; }
+
+.skeleton { background: linear-gradient(90deg, var(–surface2) 25%, var(–border) 50%, var(–surface2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 8px; height: 60px; margin-bottom: 8px; }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+#toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(–surface); border: 1px solid var(–border); border-radius: 8px; padding: 12px 20px; font-family: ‘DM Mono’, monospace; font-size: 13px; z-index: 999; transition: transform 0.3s ease; box-shadow: 0 8px 32px rgba(0,0,0,0.5); white-space: nowrap; }
+#toast.show { transform: translateX(-50%) translateY(0); }
+#toast.success { border-color: var(–ok); color: var(–ok); }
+#toast.error { border-color: var(–danger); color: var(–danger); }
+#toast.warn { border-color: var(–warn); color: var(–warn); }
+
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 200; align-items: flex-end; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(–surface); border: 1px solid var(–border); border-radius: 16px 16px 0 0; padding: 24px 20px; width: 100%; max-width: 600px; max-height: 85vh; overflow-y: auto; }
+.modal-title { font-family: ‘Syne’, sans-serif; font-weight: 800; font-size: 18px; margin-bottom: 16px; }
+.modal-close { float: right; background: var(–surface2); border: none; color: var(–muted); font-size: 16px; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; }
+
+.progress-bar { height: 4px; background: var(–border); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
+.divider { height: 1px; background: var(–border); margin: 14px 0; }
+.cost-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(–border); font-size: 13px; }
+.cost-total { display: flex; justify-content: space-between; align-items: center; padding: 12px 0 0; font-family: ‘Syne’, sans-serif; font-weight: 800; font-size: 17px; color: var(–accent); }
+
+@media (max-width: 480px) {
+.grid2 { grid-template-columns: 1fr; }
+.dash-grid { grid-template-columns: 1fr 1fr; }
+.mat-row { grid-template-columns: 1fr 90px 70px; }
+.clinic-name { font-size: 10px; }
+}
+
+/* ===== PDF PRINT ===== */
+@media print {
+* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+body { background: #fff !important; color: #111 !important; }
+header, nav, main, #sync-bar, #conn-badge, #toast { display: none !important; }
+#print-area { display: block !important; }
+.pdf-page { padding: 30px 36px; page-break-after: always; }
+.pdf-page:last-child { page-break-after: avoid; }
+
+```
+/* PDF HEADER */
+.pdf-header { border-bottom: 3px solid #d4a800; padding-bottom: 14px; margin-bottom: 20px; }
+.pdf-header-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.pdf-logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 26px; color: #111; }
+.pdf-logo span { color: #d4a800; }
+.pdf-meta { text-align: right; font-size: 11px; color: #777; line-height: 1.7; }
+.pdf-clinic-bar { display: flex; justify-content: space-between; align-items: center; background: #fdf9ec; border: 1px solid #e8d88a; border-radius: 6px; padding: 8px 14px; }
+.pdf-clinic-name { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 13px; color: #b08000; letter-spacing: 0.06em; }
+.pdf-clinic-doctors { font-size: 11px; color: #666; text-align: right; line-height: 1.6; }
+
+.pdf-stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin: 16px 0; }
+.pdf-stat { background: #fdf9ec; border: 1px solid #e8d88a; border-radius: 8px; padding: 10px; text-align: center; }
+.pdf-stat-num { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 22px; color: #c49000; }
+.pdf-stat-lbl { font-size: 10px; color: #777; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+.pdf-section-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px; color: #c49000; text-transform: uppercase; letter-spacing: 0.07em; border-bottom: 1px solid #ddd; padding-bottom: 6px; margin: 20px 0 10px; }
+.pdf-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 14px; }
+.pdf-table th { background: #f5f0de; font-family: 'Syne', sans-serif; font-weight: 700; padding: 7px 9px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid #ddd; }
+.pdf-table td { padding: 6px 9px; border: 1px solid #eee; vertical-align: top; line-height: 1.4; }
+.pdf-table tr:nth-child(even) td { background: #fafafa; }
+.pdf-badge-c  { background: #ffe0e0; color: #b00000; border-radius: 4px; padding: 1px 5px; font-size: 9px; font-weight: 700; }
+.pdf-badge-w  { background: #fff3e0; color: #b06000; border-radius: 4px; padding: 1px 5px; font-size: 9px; font-weight: 700; }
+.pdf-badge-ok { background: #e0f5e9; color: #1a7a40; border-radius: 4px; padding: 1px 5px; font-size: 9px; font-weight: 700; }
+.pdf-highlight { background: #fffce8; border: 1px solid #e8d047; border-radius: 6px; padding: 10px 14px; margin: 10px 0 16px; font-size: 13px; color: #333; }
+.pdf-footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 9px; color: #aaa; text-align: center; }
+```
+
+}
+#print-area { display: none; }
+</style>
+
+</head>
+<body>
+
+<div id="sync-bar"></div>
+<div id="conn-badge" class="online">● online</div>
+
+<header>
+  <div class="header-top">
+    <div class="logo">Palm<span>Stock</span></div>
+    <div class="header-stats">
+      <div class="hstat"><strong id="hd-mats">–</strong>materiais</div>
+      <div class="hstat"><strong id="hd-palm">–</strong>palmilhas</div>
+    </div>
+  </div>
+  <div class="header-clinic">
+    <div class="clinic-name">CAM | Centro de Análise do Movimento</div>
+    <div class="clinic-doctors">Dr. Felipe Cerqueira · Dr. Marcelo Cruz</div>
+  </div>
+</header>
+
+<nav>
+  <button class="active" onclick="switchTab('dashboard',this)">Dashboard</button>
+  <button onclick="switchTab('materiais',this)">Materiais</button>
+  <button onclick="switchTab('palmilha',this)">Nova Palmilha</button>
+  <button onclick="switchTab('historico',this)">Histórico</button>
+</nav>
+
+<main>
+
+  <!-- DASHBOARD -->
+
+  <div class="section visible" id="tab-dashboard">
+    <div id="alert-banner" class="alert-banner">
+      <div class="alert-title">⚠️ Estoque Crítico</div>
+      <div class="alert-items" id="alert-items"></div>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-card"><div class="dash-number" id="d-materiais" style="color:var(--accent)">–</div><div class="dash-label">Materiais</div></div>
+      <div class="dash-card"><div class="dash-number" id="d-palmilhas" style="color:var(--ok)">–</div><div class="dash-label">Palmilhas</div></div>
+      <div class="dash-card"><div class="dash-number" id="d-criticos" style="color:var(--danger)">–</div><div class="dash-label">Críticos</div></div>
+      <div class="dash-card"><div class="dash-number" id="d-custo" style="color:var(--accent2)">–</div><div class="dash-label">Custo total</div></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="card-title" style="margin-bottom:0">Status do Estoque</div>
+        <button class="btn btn-outline btn-sm" onclick="exportPDF()">📄 Relatório PDF</button>
+      </div>
+      <div id="dash-stock-list"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+    </div>
+  </div>
+
+  <!-- MATERIAIS -->
+
+  <div class="section" id="tab-materiais">
+    <div class="card">
+      <div class="card-title">Adicionar Material</div>
+      <label>Nome do Material</label>
+      <input id="mat-nome" type="text" placeholder="Ex: EVA 3mm, Látex, Tecido de Cima...">
+      <div class="grid2">
+        <div>
+          <label>Unidade de Medida</label>
+          <select id="mat-unidade">
+            <option value="un">Unidade (un)</option><option value="m">Metro (m)</option>
+            <option value="m²">Metro² (m²)</option><option value="cm">Centímetro (cm)</option>
+            <option value="kg">Quilograma (kg)</option><option value="g">Grama (g)</option>
+            <option value="ml">Mililitro (ml)</option><option value="L">Litro (L)</option>
+            <option value="par">Par</option><option value="folha">Folha</option>
+          </select>
+        </div>
+        <div><label>Estoque Inicial</label><input id="mat-estoque" type="number" min="0" step="0.01" placeholder="0"></div>
+      </div>
+      <div class="grid2">
+        <div><label>Estoque Mínimo (alerta)</label><input id="mat-minimo" type="number" min="0" step="0.01" placeholder="0"></div>
+        <div><label>Custo por Unidade (R$)</label><input id="mat-custo" type="number" min="0" step="0.01" placeholder="0,00"></div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="addMaterial()">+ Adicionar Material</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Materiais em Estoque</div>
+      <div id="mat-list"><div class="skeleton"></div><div class="skeleton"></div></div>
+    </div>
+  </div>
+
+  <!-- NOVA PALMILHA -->
+
+  <div class="section" id="tab-palmilha">
+    <div class="card">
+      <div class="card-title">Identificação da Palmilha</div>
+      <div class="grid2">
+        <div><label>Nome / Modelo</label><input id="palm-nome" type="text" placeholder="Ex: Palmilha Esportiva P"></div>
+        <div><label>Tamanho / Numeração</label><input id="palm-tamanho" type="text" placeholder="Ex: 38, P, M..."></div>
+      </div>
+      <label>Observações (opcional)</label>
+      <input id="palm-obs" type="text" placeholder="Ex: Cliente, características...">
+    </div>
+    <div class="card">
+      <div class="card-title">Materiais Utilizados</div>
+      <div id="palm-mat-list"><div class="empty"><div class="empty-icon">🔧</div>Cadastre materiais primeiro.</div></div>
+    </div>
+    <div class="card" id="cost-preview-card" style="display:none">
+      <div class="card-title">Custo de Produção</div>
+      <div id="cost-preview"></div>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="registrarPalmilha()" style="margin-top:4px">✓ Registrar Palmilha</button>
+  </div>
+
+  <!-- HISTÓRICO -->
+
+  <div class="section" id="tab-historico">
+    <div class="filter-bar">
+      <div class="filter-tabs">
+        <button class="filter-tab active" onclick="switchFilter('all',this)">Todas</button>
+        <button class="filter-tab" onclick="switchFilter('month',this)">📅 Por Mês</button>
+        <button class="filter-tab" onclick="switchFilter('material',this)">🔩 Por Material</button>
+      </div>
+      <div class="filter-content active" id="filter-all"></div>
+      <div class="filter-content" id="filter-month">
+        <label>Mês / Ano</label>
+        <input type="month" id="f-month" oninput="applyFilters()" style="max-width:200px">
+      </div>
+      <div class="filter-content" id="filter-material">
+        <label>Selecionar Material</label>
+        <select id="f-material" onchange="applyFilters()"><option value="">-- Selecione --</option></select>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+        <span id="hist-count" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">0 registro(s)</span>
+        <button class="btn btn-outline btn-sm" onclick="exportHistPDF()">📄 Exportar PDF</button>
+      </div>
+    </div>
+    <div id="hist-summary"></div>
+    <div id="hist-list"><div class="skeleton"></div><div class="skeleton"></div></div>
+  </div>
+
+</main>
+
+<!-- MODAL EDITAR -->
+
+<div class="modal-overlay" id="modal-edit">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">Editar Material</div>
+    <input type="hidden" id="edit-id">
+    <label>Nome</label><input id="edit-nome" type="text">
+    <label>Unidade</label>
+    <select id="edit-unidade">
+      <option value="un">Unidade (un)</option><option value="m">Metro (m)</option>
+      <option value="m²">Metro² (m²)</option><option value="cm">Centímetro (cm)</option>
+      <option value="kg">Quilograma (kg)</option><option value="g">Grama (g)</option>
+      <option value="ml">Mililitro (ml)</option><option value="L">Litro (L)</option>
+      <option value="par">Par</option><option value="folha">Folha</option>
+    </select>
+    <div class="grid2">
+      <div><label>Estoque Atual</label><input id="edit-estoque" type="number" min="0" step="0.01"></div>
+      <div><label>Estoque Mínimo</label><input id="edit-minimo" type="number" min="0" step="0.01"></div>
+    </div>
+    <label>Custo por Unidade (R$)</label><input id="edit-custo" type="number" min="0" step="0.01">
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="btn btn-outline" style="flex:1" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" style="flex:1" onclick="saveEdit()">Salvar</button>
+    </div>
+    <div class="divider"></div>
+    <button class="btn btn-danger btn-full" onclick="deleteMaterial()">🗑 Excluir Material</button>
+  </div>
+</div>
+
+<div id="print-area"></div>
+<div id="toast"></div>
+
+<!-- FIREBASE -->
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getFirestore, collection, doc, addDoc, deleteDoc,
+  onSnapshot, updateDoc, query, orderBy, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCnIw0Pf4dwT--BS83_R05SyW_KFmZaICw",
+  authDomain: "palmstock-db309.firebaseapp.com",
+  projectId: "palmstock-db309",
+  storageBucket: "palmstock-db309.firebasestorage.app",
+  messagingSenderId: "584761230002",
+  appId: "1:584761230002:web:9be7d58294bf6435387fab"
+};
+
+const CLINIC = {
+  nome: "CAM | Centro de Análise do Movimento",
+  medicos: "Dr. Felipe Cerqueira · Dr. Marcelo Cruz"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+let materiais = [];
+let palmilhas = [];
+let activeFilter = 'all';
+
+// SYNC BAR
+function syncStart(){ const b=document.getElementById('sync-bar'); b.className='syncing'; }
+function syncDone() { const b=document.getElementById('sync-bar'); b.className='done'; setTimeout(()=>b.className='',800); }
+
+// TOAST
+let toastTimer;
+window.toast = function(msg,type='success'){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='show '+type;
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.className='',2800);
+};
+
+// CONNECTIVITY
+window.addEventListener('online',  ()=>{ const b=document.getElementById('conn-badge'); b.className='online';  b.textContent='● online'; });
+window.addEventListener('offline', ()=>{ const b=document.getElementById('conn-badge'); b.className='offline'; b.textContent='● offline'; });
+
+// REAL-TIME LISTENERS
+onSnapshot(query(collection(db,'materiais'),orderBy('criadoEm','asc')), snap=>{
+  materiais=snap.docs.map(d=>({...d.data(),_id:d.id}));
+  renderAll(); syncDone();
+}, err=>{ toast('Erro ao carregar materiais','error'); console.error(err); });
+
+onSnapshot(query(collection(db,'palmilhas'),orderBy('criadoEm','asc')), snap=>{
+  palmilhas=snap.docs.map(d=>({...d.data(),_id:d.id}));
+  renderAll(); syncDone();
+}, err=>{ toast('Erro ao carregar histórico','error'); console.error(err); });
+
+function renderAll(){
+  renderDashboard();
+  const t=document.querySelector('.section.visible')?.id;
+  if(t==='tab-materiais') renderMateriais();
+  if(t==='tab-palmilha')  renderPalmilhaForm();
+  if(t==='tab-historico') { populateMaterialFilter(); applyFilters(); }
+}
+
+// TABS
+window.switchTab = function(tab,btn){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('visible'));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('visible');
+  if(btn) btn.classList.add('active');
+  if(tab==='palmilha') renderPalmilhaForm();
+  if(tab==='materiais') renderMateriais();
+  if(tab==='historico'){ populateMaterialFilter(); applyFilters(); }
+  if(tab==='dashboard') renderDashboard();
+};
+
+// HELPERS
+function stockStatus(m){ if(m.estoque<=0) return 'critical'; if(m.estoque<=m.minimo) return 'warn'; return 'ok'; }
+function stockColor(m) { const s=stockStatus(m); return s==='critical'?'stock-critical':s==='warn'?'stock-warn':'stock-ok'; }
+function stockPct(m)   { if(m.minimo===0) return m.estoque>0?100:0; return Math.min(100,(m.estoque/(m.minimo*3))*100); }
+function stockBarColor(m){ const s=stockStatus(m); return s==='critical'?'var(--danger)':s==='warn'?'var(--warn)':'var(--ok)'; }
+function badgeHTML(m)  { const s=stockStatus(m); return s==='critical'?'<span class="badge badge-critical">CRÍTICO</span>':s==='warn'?'<span class="badge badge-warn">BAIXO</span>':'<span class="badge badge-ok">OK</span>'; }
+
+// MATERIAIS
+window.addMaterial = async function(){
+  const nome=document.getElementById('mat-nome').value.trim();
+  if(!nome){ toast('Informe o nome do material','error'); return; }
+  const unidade=document.getElementById('mat-unidade').value;
+  const estoque=parseFloat(document.getElementById('mat-estoque').value)||0;
+  const minimo =parseFloat(document.getElementById('mat-minimo').value)||0;
+  const custo  =parseFloat(document.getElementById('mat-custo').value)||0;
+  syncStart();
+  try{
+    await addDoc(collection(db,'materiais'),{nome,unidade,estoque,minimo,custo,criadoEm:serverTimestamp()});
+    ['mat-nome','mat-estoque','mat-minimo','mat-custo'].forEach(id=>document.getElementById(id).value='');
+    toast('Material adicionado ✓');
+  }catch(e){ toast('Erro ao salvar','error'); console.error(e); }
+};
+
+function renderMateriais(){
+  const list=document.getElementById('mat-list');
+  if(!materiais.length){ list.innerHTML='<div class="empty"><div class="empty-icon">📦</div>Nenhum material cadastrado.</div>'; return; }
+  list.innerHTML=materiais.map(m=>`<div class="material-item">
+    <div class="mat-info">
+      <div class="mat-name">${m.nome} ${badgeHTML(m)}</div>
+      <div class="mat-unit">R$ ${m.custo.toFixed(2)}/${m.unidade} · mín: ${m.minimo} ${m.unidade}</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${stockPct(m)}%;background:${stockBarColor(m)}"></div></div>
+    </div>
+    <div class="mat-stock"><div class="stock-value ${stockColor(m)}">${m.estoque}</div><div class="stock-label">${m.unidade}</div></div>
+    <button class="btn btn-outline btn-sm" onclick="openEdit('${m._id}')">✎</button>
+  </div>`).join('');
+}
+
+// EDIT MODAL
+window.openEdit = function(id){
+  const m=materiais.find(x=>x._id===id); if(!m) return;
+  document.getElementById('edit-id').value=id;
+  document.getElementById('edit-nome').value=m.nome;
+  document.getElementById('edit-unidade').value=m.unidade;
+  document.getElementById('edit-estoque').value=m.estoque;
+  document.getElementById('edit-minimo').value=m.minimo;
+  document.getElementById('edit-custo').value=m.custo;
+  document.getElementById('modal-edit').classList.add('open');
+};
+window.closeModal  = function(){ document.getElementById('modal-edit').classList.remove('open'); };
+window.saveEdit    = async function(){
+  const id=document.getElementById('edit-id').value; syncStart();
+  try{
+    await updateDoc(doc(db,'materiais',id),{
+      nome:    document.getElementById('edit-nome').value.trim(),
+      unidade: document.getElementById('edit-unidade').value,
+      estoque: parseFloat(document.getElementById('edit-estoque').value)||0,
+      minimo:  parseFloat(document.getElementById('edit-minimo').value)||0,
+      custo:   parseFloat(document.getElementById('edit-custo').value)||0
+    });
+    closeModal(); toast('Material atualizado ✓');
+  }catch(e){ toast('Erro ao salvar','error'); }
+};
+window.deleteMaterial = async function(){
+  const id=document.getElementById('edit-id').value;
+  if(!confirm('Excluir este material?')) return; syncStart();
+  try{ await deleteDoc(doc(db,'materiais',id)); closeModal(); toast('Material removido','warn'); }
+  catch(e){ toast('Erro ao excluir','error'); }
+};
+
+// PALMILHA FORM
+function renderPalmilhaForm(){
+  const list=document.getElementById('palm-mat-list');
+  if(!materiais.length){ list.innerHTML='<div class="empty"><div class="empty-icon">🔧</div>Cadastre materiais primeiro.</div>'; document.getElementById('cost-preview-card').style.display='none'; return; }
+  list.innerHTML=`<div class="mat-select-list">
+    <div class="mat-row" style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;padding-bottom:6px">
+      <div>Material</div><div>Qtd usada</div><div>Custo</div>
+    </div>
+    ${materiais.map(m=>`<div class="mat-row">
+      <div><div style="font-weight:600;font-size:13px">${m.nome}</div><div style="font-size:10px;color:var(--muted)">Estoque: ${m.estoque} ${m.unidade}</div></div>
+      <input type="number" min="0" step="0.001" placeholder="0" id="use-${m._id}" oninput="updateCostPreview()">
+      <div id="cost-${m._id}" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right">R$0,00</div>
+    </div>`).join('')}
+  </div>`;
+  updateCostPreview();
+}
+
+window.updateCostPreview = function(){
+  let total=0,rows='',hasAny=false;
+  materiais.forEach(m=>{
+    const inp=document.getElementById(`use-${m._id}`);
+    const cel=document.getElementById(`cost-${m._id}`);
+    if(!inp) return;
+    const qty=parseFloat(inp.value)||0; const c=qty*m.custo;
+    if(cel) cel.textContent='R$'+c.toFixed(2);
+    if(qty>0){ hasAny=true; total+=c; rows+=`<div class="cost-row"><span>${m.nome} (${qty} ${m.unidade})</span><span style="font-family:'DM Mono',monospace">R$ ${c.toFixed(2)}</span></div>`; }
+  });
+  const card=document.getElementById('cost-preview-card'), prev=document.getElementById('cost-preview');
+  if(hasAny){ card.style.display='block'; prev.innerHTML=rows+`<div class="cost-total"><span>Custo Total</span><span>R$ ${total.toFixed(2)}</span></div>`; }
+  else card.style.display='none';
+};
+
+window.registrarPalmilha = async function(){
+  const nome   =document.getElementById('palm-nome').value.trim();
+  const tamanho=document.getElementById('palm-tamanho').value.trim();
+  const obs    =document.getElementById('palm-obs').value.trim();
+  if(!nome){ toast('Informe o nome/modelo','error'); return; }
+  const mats=[]; let total=0; let erros=[];
+  materiais.forEach(m=>{
+    const inp=document.getElementById(`use-${m._id}`); if(!inp) return;
+    const qty=parseFloat(inp.value)||0;
+    if(qty>0){
+      if(qty>m.estoque) erros.push(`${m.nome}: precisa ${qty}, tem ${m.estoque} ${m.unidade}`);
+      else{ mats.push({id:m._id,nome:m.nome,qty,unidade:m.unidade,custo:qty*m.custo}); total+=qty*m.custo; }
+    }
+  });
+  if(erros.length){ toast('Estoque insuficiente: '+erros[0],'error'); return; }
+  if(!mats.length){ toast('Selecione pelo menos um material','error'); return; }
+  syncStart();
+  try{
+    for(const mu of mats){
+      const m=materiais.find(x=>x._id===mu.id);
+      if(m) await updateDoc(doc(db,'materiais',mu.id),{estoque:parseFloat((m.estoque-mu.qty).toFixed(4))});
+    }
+    await addDoc(collection(db,'palmilhas'),{nome,tamanho,obs,materiais:mats,custo_total:total,criadoEm:serverTimestamp()});
+    ['palm-nome','palm-tamanho','palm-obs'].forEach(id=>document.getElementById(id).value='');
+    renderPalmilhaForm();
+    toast(`Palmilha registrada — R$ ${total.toFixed(2)} ✓`);
+    const criticos=materiais.filter(m=>m.estoque<=m.minimo&&m.minimo>0);
+    if(criticos.length) setTimeout(()=>toast(`⚠️ ${criticos.length} item(ns) crítico(s)!`,'warn'),900);
+  }catch(e){ toast('Erro ao registrar','error'); console.error(e); }
+};
+
+// DASHBOARD
+function renderDashboard(){
+  const criticos=materiais.filter(m=>stockStatus(m)!=='ok');
+  const totalCusto=palmilhas.reduce((a,p)=>a+p.custo_total,0);
+  document.getElementById('d-materiais').textContent=materiais.length;
+  document.getElementById('d-palmilhas').textContent=palmilhas.length;
+  document.getElementById('d-criticos').textContent=criticos.length;
+  document.getElementById('d-custo').textContent='R$'+totalCusto.toFixed(0);
+  document.getElementById('hd-mats').textContent=materiais.length;
+  document.getElementById('hd-palm').textContent=palmilhas.length;
+  const banner=document.getElementById('alert-banner');
+  if(criticos.length){ banner.classList.add('visible'); document.getElementById('alert-items').innerHTML=criticos.map(m=>`• ${m.nome}: ${m.estoque} ${m.unidade} (mín: ${m.minimo})`).join('<br>'); }
+  else banner.classList.remove('visible');
+  const dl=document.getElementById('dash-stock-list');
+  if(!materiais.length){ dl.innerHTML='<div class="empty"><div class="empty-icon">📦</div>Nenhum material cadastrado ainda.</div>'; return; }
+  dl.innerHTML=materiais.map(m=>`<div class="material-item">
+    <div class="mat-info">
+      <div class="mat-name">${m.nome} ${badgeHTML(m)}</div>
+      <div class="mat-unit">mín: ${m.minimo} ${m.unidade}</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${stockPct(m)}%;background:${stockBarColor(m)}"></div></div>
+    </div>
+    <div class="mat-stock"><div class="stock-value ${stockColor(m)}">${m.estoque}</div><div class="stock-label">${m.unidade}</div></div>
+  </div>`).join('');
+}
+
+// FILTROS HISTÓRICO
+window.switchFilter = function(type,btn){
+  activeFilter=type;
+  document.querySelectorAll('.filter-tab').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  document.querySelectorAll('.filter-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById('filter-'+type).classList.add('active');
+  applyFilters();
+};
+
+function populateMaterialFilter(){
+  const sel=document.getElementById('f-material');
+  const curr=sel.value;
+  sel.innerHTML='<option value="">-- Selecione --</option>'+materiais.map(m=>`<option value="${m._id}">${m.nome}</option>`).join('');
+  if(curr) sel.value=curr;
+}
+
+function getFilteredPalmilhas(){
+  let list=[...palmilhas];
+  if(activeFilter==='month'){
+    const val=document.getElementById('f-month').value;
+    if(val){ const[y,mo]=val.split('-').map(Number); list=list.filter(p=>{ const d=p.criadoEm?.toDate?p.criadoEm.toDate():new Date(p.criadoEm); return d.getFullYear()===y&&d.getMonth()+1===mo; }); }
+  } else if(activeFilter==='material'){
+    const matId=document.getElementById('f-material').value;
+    if(matId) list=list.filter(p=>p.materiais.some(m=>m.id===matId));
+  }
+  return list;
+}
+
+window.applyFilters = function(){
+  const filtered=getFilteredPalmilhas();
+  renderHistList(filtered);
+  renderHistSummary(filtered);
+};
+
+function renderHistList(list){
+  const el=document.getElementById('hist-list');
+  document.getElementById('hist-count').textContent=list.length+' registro(s)';
+  if(!list.length){ el.innerHTML='<div class="empty"><div class="empty-icon">📋</div>Nenhuma palmilha encontrada.</div>'; return; }
+  el.innerHTML=[...list].reverse().map(p=>{
+    const d=p.criadoEm?.toDate?p.criadoEm.toDate():new Date(p.criadoEm||Date.now());
+    const ds=d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    const ms=p.materiais.map(m=>`${m.nome}: ${m.qty} ${m.unidade}`).join(' · ');
+    return `<div class="history-item">
+      <div class="history-header">
+        <div class="history-name">${p.nome}${p.tamanho?' — '+p.tamanho:''}</div>
+        <div class="history-cost">R$ ${p.custo_total.toFixed(2)}</div>
+      </div>
+      <div class="history-date">${ds}</div>
+      <div class="history-mats">${ms}</div>
+      ${p.obs?`<div class="history-mats" style="color:var(--accent);opacity:0.8">📝 ${p.obs}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function renderHistSummary(list){
+  const el=document.getElementById('hist-summary');
+  if(!list.length||activeFilter==='all'){ el.innerHTML=''; return; }
+  const totalCusto=list.reduce((a,p)=>a+p.custo_total,0);
+  const matMap={};
+  list.forEach(p=>p.materiais.forEach(m=>{ if(!matMap[m.nome]) matMap[m.nome]={qty:0,unidade:m.unidade,custo:0}; matMap[m.nome].qty+=m.qty; matMap[m.nome].custo+=m.custo; }));
+  if(activeFilter==='month'){
+    const rows=Object.entries(matMap).map(([n,v])=>`<div class="summary-row"><span>${n}</span><span style="font-family:'DM Mono',monospace">${v.qty.toFixed(3)} ${v.unidade} — R$ ${v.custo.toFixed(2)}</span></div>`).join('');
+    el.innerHTML=`<div class="card" style="border-color:rgba(232,197,71,0.4)"><div class="card-title">Resumo do Mês</div><div class="summary-box">
+      <div class="summary-row"><span>Palmilhas produzidas</span><span style="font-family:'DM Mono',monospace;color:var(--ok);font-weight:700">${list.length}</span></div>
+      ${rows}<div class="summary-total"><span>Custo Total</span><span>R$ ${totalCusto.toFixed(2)}</span></div></div></div>`;
+  } else if(activeFilter==='material'){
+    const matId=document.getElementById('f-material').value;
+    const mat=materiais.find(m=>m._id===matId);
+    let tQty=0,tCusto=0;
+    list.forEach(p=>p.materiais.forEach(m=>{ if(m.id===matId){ tQty+=m.qty; tCusto+=m.custo; } }));
+    el.innerHTML=`<div class="card" style="border-color:rgba(38,222,129,0.4)"><div class="card-title">Consumo: ${mat?mat.nome:''}</div><div class="summary-box">
+      <div class="summary-row"><span>Palmilhas que usaram este material</span><span style="font-family:'DM Mono',monospace;color:var(--ok);font-weight:700">${list.length}</span></div>
+      <div class="summary-row"><span>Quantidade total consumida</span><span style="font-family:'DM Mono',monospace">${tQty.toFixed(3)} ${mat?mat.unidade:''}</span></div>
+      <div class="summary-total"><span>Custo Total Gerado</span><span>R$ ${tCusto.toFixed(2)}</span></div></div></div>`;
+  }
+}
+
+// PDF
+function nowStr(){ const n=new Date(); return n.toLocaleDateString('pt-BR')+' às '+n.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
+
+function pdfHeader(title, sub){
+  return `<div class="pdf-header">
+    <div class="pdf-header-top">
+      <div>
+        <div class="pdf-logo">Palm<span>Stock</span></div>
+        <div style="font-size:12px;color:#666;margin-top:3px">${title}</div>
+      </div>
+      <div class="pdf-meta"><div>${sub}</div><div>Gerado em ${nowStr()}</div></div>
+    </div>
+    <div class="pdf-clinic-bar">
+      <div class="pdf-clinic-name">${CLINIC.nome}</div>
+      <div class="pdf-clinic-doctors">${CLINIC.medicos}</div>
+    </div>
+  </div>`;
+}
+
+window.exportPDF = function(){
+  const totalCusto=palmilhas.reduce((a,p)=>a+p.custo_total,0);
+  const criticos=materiais.filter(m=>stockStatus(m)!=='ok');
+  const stats=`<div class="pdf-stat-grid">
+    <div class="pdf-stat"><div class="pdf-stat-num">${materiais.length}</div><div class="pdf-stat-lbl">Materiais</div></div>
+    <div class="pdf-stat"><div class="pdf-stat-num">${palmilhas.length}</div><div class="pdf-stat-lbl">Palmilhas</div></div>
+    <div class="pdf-stat"><div class="pdf-stat-num">${criticos.length}</div><div class="pdf-stat-lbl">Críticos</div></div>
+    <div class="pdf-stat"><div class="pdf-stat-num">R$${totalCusto.toFixed(0)}</div><div class="pdf-stat-lbl">Custo Total</div></div>
+  </div>`;
+  const matRows=materiais.map(m=>{ const s=stockStatus(m); const b=s==='critical'?'<span class="pdf-badge-c">CRÍTICO</span>':s==='warn'?'<span class="pdf-badge-w">BAIXO</span>':'<span class="pdf-badge-ok">OK</span>'; return `<tr><td><strong>${m.nome}</strong></td><td>${m.unidade}</td><td>${m.estoque}</td><td>${m.minimo}</td><td>R$ ${m.custo.toFixed(2)}</td><td>${b}</td></tr>`; }).join('');
+  const palmRows=[...palmilhas].reverse().slice(0,40).map(p=>{ const d=p.criadoEm?.toDate?p.criadoEm.toDate():new Date(); return `<tr><td>${d.toLocaleDateString('pt-BR')}</td><td><strong>${p.nome}</strong>${p.tamanho?' — '+p.tamanho:''}</td><td style="font-size:10px">${p.materiais.map(m=>m.nome+' ('+m.qty+' '+m.unidade+')').join(', ')}</td><td>R$ ${p.custo_total.toFixed(2)}</td></tr>`; }).join('');
+  document.getElementById('print-area').innerHTML=`<div class="pdf-page">
+    ${pdfHeader('Relatório Geral de Estoque','Visão completa')}
+    ${stats}
+    <div class="pdf-section-title">Estoque de Materiais</div>
+    <table class="pdf-table"><thead><tr><th>Material</th><th>Unid.</th><th>Estoque</th><th>Mínimo</th><th>Custo/Un</th><th>Status</th></tr></thead>
+    <tbody>${matRows||'<tr><td colspan="6" style="text-align:center;color:#aaa;padding:12px">Sem materiais</td></tr>'}</tbody></table>
+    <div class="pdf-section-title">Palmilhas Produzidas</div>
+    <table class="pdf-table"><thead><tr><th>Data</th><th>Modelo</th><th>Materiais</th><th>Custo</th></tr></thead>
+    <tbody>${palmRows||'<tr><td colspan="4" style="text-align:center;color:#aaa;padding:12px">Sem registros</td></tr>'}</tbody></table>
+    <div class="pdf-footer">PalmStock · ${CLINIC.nome} · ${CLINIC.medicos} · ${nowStr()}</div>
+  </div>`;
+  setTimeout(()=>window.print(),150);
+};
+
+window.exportHistPDF = function(){
+  const filtered=getFilteredPalmilhas();
+  let sub='Todas as palmilhas';
+  if(activeFilter==='month'){ const v=document.getElementById('f-month').value; if(v){ const[y,m]=v.split('-'); sub=`Período: ${m}/${y}`; } }
+  else if(activeFilter==='material'){ const id=document.getElementById('f-material').value; const mat=materiais.find(m=>m._id===id); if(mat) sub=`Material: ${mat.nome}`; }
+  const totalCusto=filtered.reduce((a,p)=>a+p.custo_total,0);
+  const matMap={};
+  filtered.forEach(p=>p.materiais.forEach(m=>{ if(!matMap[m.nome]) matMap[m.nome]={qty:0,unidade:m.unidade,custo:0}; matMap[m.nome].qty+=m.qty; matMap[m.nome].custo+=m.custo; }));
+  const matRows=Object.entries(matMap).map(([n,v])=>`<tr><td>${n}</td><td>${v.unidade}</td><td>${v.qty.toFixed(3)}</td><td>R$ ${v.custo.toFixed(2)}</td></tr>`).join('');
+  const palmRows=[...filtered].reverse().map(p=>{ const d=p.criadoEm?.toDate?p.criadoEm.toDate():new Date(); return `<tr><td>${d.toLocaleDateString('pt-BR')}</td><td><strong>${p.nome}</strong>${p.tamanho?' — '+p.tamanho:''}</td><td style="font-size:10px">${p.materiais.map(m=>m.nome+' ('+m.qty+' '+m.unidade+')').join(', ')}</td><td>R$ ${p.custo_total.toFixed(2)}</td></tr>`; }).join('');
+  document.getElementById('print-area').innerHTML=`<div class="pdf-page">
+    ${pdfHeader('Relatório de Histórico', sub)}
+    <div class="pdf-highlight"><strong>${filtered.length}</strong> palmilha(s) &nbsp;|&nbsp; Custo total: <strong>R$ ${totalCusto.toFixed(2)}</strong></div>
+    <div class="pdf-section-title">Consumo de Materiais</div>
+    <table class="pdf-table"><thead><tr><th>Material</th><th>Unidade</th><th>Qtd Total</th><th>Custo Total</th></tr></thead>
+    <tbody>${matRows||'<tr><td colspan="4" style="text-align:center;color:#aaa;padding:12px">Sem dados</td></tr>'}</tbody></table>
+    <div class="pdf-section-title">Palmilhas Produzidas</div>
+    <table class="pdf-table"><thead><tr><th>Data</th><th>Modelo</th><th>Materiais</th><th>Custo</th></tr></thead>
+    <tbody>${palmRows||'<tr><td colspan="4" style="text-align:center;color:#aaa;padding:12px">Sem registros</td></tr>'}</tbody></table>
+    <div class="pdf-footer">PalmStock · ${CLINIC.nome} · ${CLINIC.medicos} · ${nowStr()}</div>
+  </div>`;
+  setTimeout(()=>window.print(),150);
+};
+</script>
+
+</body>
+</html>
