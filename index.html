@@ -391,7 +391,6 @@ window.initApp = function() {
   }, err=>{ toast('Erro ao carregar histórico','error'); });
 };
 
-// Init direto
 window.initApp();
 
 function syncStart(){ const b=document.getElementById('sync-bar'); b.className='syncing'; }
@@ -506,9 +505,22 @@ function renderPalmilhaForm(){
   const list=document.getElementById('palm-mat-list');
   if(!materiais.length){ list.innerHTML='<div class="empty"><div class="empty-icon">🔧</div>Cadastre materiais primeiro.</div>'; document.getElementById('cost-preview-card').style.display='none'; return; }
   materiais.forEach(m=>{ if(qtyMap[m._id]===undefined) qtyMap[m._id]=0; });
-  list.innerHTML='<div class="mat-select-list"><div class="mat-row" style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;padding-bottom:6px"><div>Material</div><div>Quantidade</div><div>Custo</div></div>'
-    + materiais.map(m=>'<div class="mat-row"><div><div style="font-weight:600;font-size:13px">'+m.nome+'</div><div style="font-size:10px;color:var(--muted)">Estoque: '+m.estoque+' '+m.unidade+'</div></div><div class="qty-control"><button class="qty-btn" onclick="qtyChange(''+m._id+'',-1)">−</button><div class="qty-val" id="use-'+m._id+'">'+(qtyMap[m._id]||0)+'</div><button class="qty-btn" onclick="qtyChange(''+m._id+'',1)">+</button></div><div id="cost-'+m._id+'" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right">R$0,00</div></div>').join('')
-    + '</div>';
+  const rows = materiais.map(function(m){
+    return '<div class="mat-row">'
+      + '<div><div style="font-weight:600;font-size:13px">' + m.nome + '</div>'
+      + '<div style="font-size:10px;color:var(--muted)">Estoque: ' + m.estoque + ' ' + m.unidade + '</div></div>'
+      + '<div class="qty-control">'
+      + '<button class="qty-btn" onclick="qtyChange(\'' + m._id + '\',-1)">\u2212</button>'
+      + '<div class="qty-val" id="use-' + m._id + '">' + (qtyMap[m._id]||0) + '</div>'
+      + '<button class="qty-btn" onclick="qtyChange(\'' + m._id + '\',1)">+</button>'
+      + '</div>'
+      + '<div id="cost-' + m._id + '" style="font-family:monospace;font-size:12px;color:var(--muted);text-align:right">R$0,00</div>'
+      + '</div>';
+  }).join('');
+  list.innerHTML = '<div class="mat-select-list">'
+    + '<div class="mat-row" style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;padding-bottom:6px">'
+    + '<div>Material</div><div>Quantidade</div><div>Custo</div></div>'
+    + rows + '</div>';
   updateCostPreview();
 }
 
@@ -518,7 +530,7 @@ window.updateCostPreview = function(){
     const cel=document.getElementById('cost-'+m._id);
     const qty=qtyMap[m._id]||0; const c=qty*m.custo;
     if(cel) cel.textContent='R$'+c.toFixed(2);
-    if(qty>0){ hasAny=true; total+=c; rows+='<div class="cost-row"><span>'+m.nome+' ('+qty+' '+m.unidade+')</span><span style="font-family:'DM Mono',monospace">R$ '+c.toFixed(2)+'</span></div>'; }
+    if(qty>0){ hasAny=true; total+=c; rows+='<div class="cost-row"><span>'+m.nome+' ('+qty+' '+m.unidade+')</span><span style="font-family:monospace">R$ '+c.toFixed(2)+'</span></div>'; }
   });
   const card=document.getElementById('cost-preview-card'), prev=document.getElementById('cost-preview');
   if(hasAny){ card.style.display='block'; prev.innerHTML=rows+'<div class="cost-total"><span>Custo Total</span><span>R$ '+total.toFixed(2)+'</span></div>'; }
