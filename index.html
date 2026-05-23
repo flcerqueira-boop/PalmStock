@@ -302,7 +302,10 @@
           <select id="f-material" onchange="applyFilters()"><option value="">-- Selecione --</option></select>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+          <div>
           <span id="hist-count" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">0 registro(s)</span>
+          <div id="hist-avg" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--accent);margin-top:2px;display:none"></div>
+        </div>
           <button class="btn btn-outline btn-sm" onclick="exportHistPDF()">📄 Exportar PDF</button>
         </div>
       </div>
@@ -626,7 +629,10 @@ window.applyFilters = function(){
 
 function renderHistList(list){
   const el=document.getElementById('hist-list');
+  const avgCusto = list.length ? list.reduce((a,p)=>a+p.custo_total,0)/list.length : 0;
   document.getElementById('hist-count').textContent=list.length+' registro(s)';
+  const avgEl = document.getElementById('hist-avg');
+  if(avgEl){ if(list.length>0){ avgEl.textContent='Custo médio: R$ '+avgCusto.toFixed(2); avgEl.style.display='block'; } else avgEl.style.display='none'; }
   if(!list.length){ el.innerHTML='<div class="empty"><div class="empty-icon">📋</div>Nenhuma palmilha encontrada.</div>'; return; }
   el.innerHTML=[...list].reverse().map(p=>{
     const d=p.criadoEm?.toDate?p.criadoEm.toDate():new Date(p.criadoEm||Date.now());
@@ -652,17 +658,22 @@ function renderHistSummary(list){
   list.forEach(p=>p.materiais.forEach(m=>{ if(!matMap[m.nome]) matMap[m.nome]={qty:0,unidade:m.unidade,custo:0}; matMap[m.nome].qty+=m.qty; matMap[m.nome].custo+=m.custo; }));
   if(activeFilter==='month'){
     const rows=Object.entries(matMap).map(([n,v])=>`<div class="summary-row"><span>${n}</span><span style="font-family:'DM Mono',monospace">${v.qty.toFixed(3)} ${v.unidade} — R$ ${v.custo.toFixed(2)}</span></div>`).join('');
+    const avgMes = list.length ? totalCusto/list.length : 0;
     el.innerHTML=`<div class="card" style="border-color:rgba(232,197,71,0.4)"><div class="card-title">Resumo do Mês</div><div class="summary-box">
       <div class="summary-row"><span>Palmilhas produzidas</span><span style="font-family:'DM Mono',monospace;color:var(--ok);font-weight:700">${list.length}</span></div>
-      ${rows}<div class="summary-total"><span>Custo Total</span><span>R$ ${totalCusto.toFixed(2)}</span></div></div></div>`;
+      ${rows}
+      <div class="summary-row"><span>Custo médio por palmilha</span><span style="font-family:'DM Mono',monospace;color:var(--accent)">R$ ${avgMes.toFixed(2)}</span></div>
+      <div class="summary-total"><span>Custo Total</span><span>R$ ${totalCusto.toFixed(2)}</span></div></div></div>`;
   } else if(activeFilter==='material'){
     const matId=document.getElementById('f-material').value;
     const mat=materiais.find(m=>m._id===matId);
     let tQty=0,tCusto=0;
     list.forEach(p=>p.materiais.forEach(m=>{ if(m.id===matId){ tQty+=m.qty; tCusto+=m.custo; } }));
+    const avgMat = list.length ? list.reduce((a,p)=>a+p.custo_total,0)/list.length : 0;
     el.innerHTML=`<div class="card" style="border-color:rgba(38,222,129,0.4)"><div class="card-title">Consumo: ${mat?mat.nome:''}</div><div class="summary-box">
       <div class="summary-row"><span>Palmilhas que usaram este material</span><span style="font-family:'DM Mono',monospace;color:var(--ok);font-weight:700">${list.length}</span></div>
       <div class="summary-row"><span>Quantidade total consumida</span><span style="font-family:'DM Mono',monospace">${tQty.toFixed(3)} ${mat?mat.unidade:''}</span></div>
+      <div class="summary-row"><span>Custo médio por palmilha</span><span style="font-family:'DM Mono',monospace;color:var(--accent)">R$ ${avgMat.toFixed(2)}</span></div>
       <div class="summary-total"><span>Custo Total Gerado</span><span>R$ ${tCusto.toFixed(2)}</span></div></div></div>`;
   }
 }
@@ -684,10 +695,11 @@ function pdfHeader(title,sub){
 window.exportPDF = function(){
   const totalCusto=palmilhas.reduce((a,p)=>a+p.custo_total,0);
   const criticos=materiais.filter(m=>stockStatus(m)!=='ok');
+  const avgGeral = palmilhas.length ? totalCusto/palmilhas.length : 0;
   const stats=`<div class="pdf-stat-grid">
     <div class="pdf-stat"><div class="pdf-stat-num">${materiais.length}</div><div class="pdf-stat-lbl">Materiais</div></div>
     <div class="pdf-stat"><div class="pdf-stat-num">${palmilhas.length}</div><div class="pdf-stat-lbl">Palmilhas</div></div>
-    <div class="pdf-stat"><div class="pdf-stat-num">${criticos.length}</div><div class="pdf-stat-lbl">Críticos</div></div>
+    <div class="pdf-stat"><div class="pdf-stat-num">R$${avgGeral.toFixed(2)}</div><div class="pdf-stat-lbl">Custo Médio</div></div>
     <div class="pdf-stat"><div class="pdf-stat-num">R$${totalCusto.toFixed(0)}</div><div class="pdf-stat-lbl">Custo Total</div></div>
   </div>`;
   const matRows=materiais.map(m=>{ const s=stockStatus(m); const b=s==='critical'?'<span class="pdf-badge-c">CRÍTICO</span>':s==='warn'?'<span class="pdf-badge-w">BAIXO</span>':'<span class="pdf-badge-ok">OK</span>'; return `<tr><td><strong>${m.nome}</strong></td><td>${m.unidade}</td><td>${m.estoque}</td><td>${m.minimo}</td><td>R$ ${m.custo.toFixed(2)}</td><td>${b}</td></tr>`; }).join('');
@@ -714,7 +726,7 @@ window.exportHistPDF = function(){
   const matRows=Object.entries(matMap).map(([n,v])=>`<tr><td>${n}</td><td>${v.unidade}</td><td>${v.qty.toFixed(3)}</td><td>R$ ${v.custo.toFixed(2)}</td></tr>`).join('');
   const palmRows=[...filtered].reverse().map(p=>{ const d=p.criadoEm?.toDate?p.criadoEm.toDate():new Date(); return `<tr><td>${d.toLocaleDateString('pt-BR')}</td><td><strong>${p.nome}</strong>${p.tamanho?' — '+p.tamanho:''}</td><td style="font-size:10px">${p.materiais.map(m=>m.nome+' ('+m.qty+' '+m.unidade+')').join(', ')}</td><td>R$ ${p.custo_total.toFixed(2)}</td></tr>`; }).join('');
   document.getElementById('print-area').innerHTML=`<div class="pdf-page">${pdfHeader('Relatório de Histórico',sub)}
-    <div class="pdf-highlight"><strong>${filtered.length}</strong> palmilha(s) &nbsp;|&nbsp; Custo total: <strong>R$ ${totalCusto.toFixed(2)}</strong></div>
+    <div class="pdf-highlight"><strong>${filtered.length}</strong> palmilha(s) &nbsp;|&nbsp; Custo total: <strong>R$ ${totalCusto.toFixed(2)}</strong> &nbsp;|&nbsp; Custo médio: <strong>R$ ${(filtered.length?totalCusto/filtered.length:0).toFixed(2)}</strong></div>
     <div class="pdf-section-title">Consumo de Materiais</div>
     <table class="pdf-table"><thead><tr><th>Material</th><th>Unidade</th><th>Qtd Total</th><th>Custo Total</th></tr></thead>
     <tbody>${matRows||'<tr><td colspan="4" style="text-align:center;color:#aaa;padding:12px">Sem dados</td></tr>'}</tbody></table>
