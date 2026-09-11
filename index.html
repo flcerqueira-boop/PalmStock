@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>PalmStock — CAM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -161,6 +162,22 @@
   .cost-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .cost-total { display: flex; justify-content: space-between; align-items: center; padding: 12px 0 0; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 17px; color: var(--accent); }
 
+  /* ===== DRAG AND DROP ===== */
+  .mat-drag-handle { cursor: grab; color: var(--muted); font-size: 18px; padding: 0 8px; user-select: none; }
+  .mat-drag-handle:active { cursor: grabbing; }
+  .material-item.sortable-ghost { opacity: 0.3; background: var(--accent); }
+  .material-item.sortable-chosen { border-color: var(--accent); }
+  .drag-hint { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); text-align: center; padding: 6px 0 2px; letter-spacing: 0.04em; }
+
+  /* ===== ABA PEDIDO ===== */
+  .pedido-row { display: grid; grid-template-columns: 1fr 90px 90px 70px; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .pedido-row:last-child { border-bottom: none; }
+  .pedido-row input[type="number"] { margin-bottom: 0; text-align: center; padding: 8px; }
+  .pedido-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; margin: 0; }
+  .pedido-header { display: grid; grid-template-columns: 1fr 90px 90px 70px; gap: 8px; padding: 0 0 8px; border-bottom: 2px solid var(--border); margin-bottom: 4px; }
+  .pedido-header span { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .pedido-header span:nth-child(2), .pedido-header span:nth-child(3), .pedido-header span:nth-child(4) { text-align: center; }
+
   @media (max-width: 480px) {
     .grid2 { grid-template-columns: 1fr; }
     .dash-grid { grid-template-columns: 1fr 1fr; }
@@ -227,6 +244,7 @@
     <button onclick="switchTab('materiais',this)">Materiais</button>
     <button onclick="switchTab('palmilha',this)">Nova Palmilha</button>
     <button onclick="switchTab('historico',this)">Histórico</button>
+    <button onclick="switchTab('pedido',this)">🛒 Pedido</button>
   </nav>
 
   <main>
@@ -338,6 +356,18 @@
     </div>
   </main>
 
+    <!-- PEDIDO -->
+    <div class="section" id="tab-pedido">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="card-title" style="margin-bottom:0">Montar Pedido</div>
+          <button class="btn btn-primary btn-sm" onclick="gerarPedidoPDF()">📄 Gerar PDF</button>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Marque os materiais que deseja pedir e informe a quantidade. O PDF serve de referência para efetuar o pedido no site do fornecedor.</p>
+        <div id="pedido-list"></div>
+      </div>
+    </div>
+
   <!-- MODAL EDITAR -->
   <div class="modal-overlay" id="modal-edit">
     <div class="modal">
@@ -412,8 +442,17 @@ window.initApp = function() {
   window.addEventListener('online',  ()=>{ const b=document.getElementById('conn-badge'); b.className='online';  b.textContent='● online'; });
   window.addEventListener('offline', ()=>{ const b=document.getElementById('conn-badge'); b.className='offline'; b.textContent='● offline'; });
 
-  onSnapshot(query(collection(db,'materiais'),orderBy('criadoEm','asc')), snap=>{
-    materiais=snap.docs.map(d=>({...d.data(),_id:d.id}));
+  onSnapshot(collection(db,'materiais'), snap=>{
+    const docs=snap.docs.map(d=>({...d.data(),_id:d.id}));
+    // ordenar: primeiro por 'ordem' (se tiver), depois por criadoEm
+    docs.sort((a,b)=>{
+      const ao = a.ordem!==undefined ? a.ordem : 99999;
+      const bo = b.ordem!==undefined ? b.ordem : 99999;
+      if(ao!==bo) return ao-bo;
+      const at=a.criadoEm?.seconds||0; const bt=b.criadoEm?.seconds||0;
+      return at-bt;
+    });
+    materiais=docs;
     renderAll(); syncDone();
   }, err=>{ toast('Erro ao carregar materiais','error'); });
 
@@ -441,6 +480,7 @@ function renderAll(){
   if(t==='tab-materiais') renderMateriais();
   if(t==='tab-palmilha')  renderPalmilhaForm();
   if(t==='tab-historico') { populateMaterialFilter(); applyFilters(); }
+  if(t==='tab-pedido') renderPedido();
 }
 
 window.switchTab = function(tab,btn){
@@ -452,6 +492,7 @@ window.switchTab = function(tab,btn){
   if(tab==='materiais') renderMateriais();
   if(tab==='historico'){ populateMaterialFilter(); applyFilters(); }
   if(tab==='dashboard') renderDashboard();
+  if(tab==='pedido') renderPedido();
 };
 
 function stockStatus(m){ if(m.estoque<=0) return 'critical'; if(m.estoque<=m.minimo) return 'warn'; return 'ok'; }
@@ -471,24 +512,57 @@ window.addMaterial = async function(){
   const foto   =document.getElementById('mat-foto').value.trim()||'';
   syncStart();
   try{
-    await addDoc(collection(db,'materiais'),{nome,unidade,estoque,minimo,custo,grupo,foto,criadoEm:serverTimestamp()});
+    const maxOrdem = materiais.length ? Math.max(...materiais.map(m=>m.ordem||0)) : 0;
+    await addDoc(collection(db,'materiais'),{nome,unidade,estoque,minimo,custo,grupo,foto,ordem:maxOrdem+1,criadoEm:serverTimestamp()});
     ['mat-nome','mat-grupo','mat-foto','mat-estoque','mat-minimo','mat-custo'].forEach(id=>document.getElementById(id).value='');
     toast('Material adicionado ✓');
   }catch(e){ toast('Erro ao salvar','error'); }
 };
 
+let sortableInstance = null;
 function renderMateriais(){
   const list=document.getElementById('mat-list');
   if(!materiais.length){ list.innerHTML='<div class="empty"><div class="empty-icon">📦</div>Nenhum material cadastrado.</div>'; return; }
-  list.innerHTML=materiais.map(m=>`<div class="material-item">
-    <div class="mat-info">
-      <div class="mat-name">${m.nome} ${badgeHTML(m)}</div>
-      <div class="mat-unit">R$ ${m.custo.toFixed(2)}/${m.unidade} · mín: ${m.minimo} ${m.unidade}</div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${stockPct(m)}%;background:${stockBarColor(m)}"></div></div>
-    </div>
-    <div class="mat-stock"><div class="stock-value ${stockColor(m)}">${m.estoque}</div><div class="stock-label">${m.unidade}</div></div>
-    <button class="btn btn-outline btn-sm" onclick="openEdit('${m._id}')">✎</button>
-  </div>`).join('');
+  // agrupar por grupo
+  const grupos={};
+  materiais.forEach(m=>{ const g=m.grupo||'Geral'; if(!grupos[g]) grupos[g]=[]; grupos[g].push(m); });
+  let html='<div class="drag-hint">⠿ Arraste para reordenar</div><div id="sortable-mat-list">';
+  Object.entries(grupos).forEach(([grupo, mats])=>{
+    html+=`<div style="font-family:'Syne',sans-serif;font-weight:800;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding:10px 0 6px;border-bottom:1px solid var(--border);margin-bottom:6px">${grupo}</div>`;
+    mats.forEach(m=>{
+      html+=`<div class="material-item" data-id="${m._id}">
+        <div class="mat-drag-handle">⠿</div>
+        <div class="mat-info">
+          <div class="mat-name">${m.nome} ${badgeHTML(m)}</div>
+          <div class="mat-unit">R$ ${m.custo.toFixed(2)}/${m.unidade} · mín: ${m.minimo} ${m.unidade} · Grupo: ${m.grupo||'Geral'}</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${stockPct(m)}%;background:${stockBarColor(m)}"></div></div>
+        </div>
+        <div class="mat-stock"><div class="stock-value ${stockColor(m)}">${m.estoque}</div><div class="stock-label">${m.unidade}</div></div>
+        <button class="btn btn-outline btn-sm" onclick="openEdit('${m._id}')">✎</button>
+      </div>`;
+    });
+  });
+  html+='</div>';
+  list.innerHTML=html;
+  // inicializar drag-and-drop
+  if(sortableInstance) sortableInstance.destroy();
+  const el=document.getElementById('sortable-mat-list');
+  if(el && typeof Sortable !== 'undefined'){
+    sortableInstance = Sortable.create(el, {
+      handle: '.mat-drag-handle',
+      animation: 150,
+      filter: '.mat-group-label',
+      onEnd: async function(evt){
+        // reindexar ordem baseado na posição atual dos items
+        const items = el.querySelectorAll('.material-item[data-id]');
+        const updates = [];
+        items.forEach((item, idx)=>{ updates.push({id: item.dataset.id, ordem: idx+1}); });
+        try{
+          for(const u of updates) await updateDoc(doc(db,'materiais',u.id),{ordem:u.ordem});
+        }catch(e){ toast('Erro ao salvar ordem','error'); }
+      }
+    });
+  }
 }
 
 window.openEdit = function(id){
@@ -640,6 +714,78 @@ window.registrarPalmilha = async function(){
     const criticos=materiais.filter(m=>m.estoque<=m.minimo&&m.minimo>0);
     if(criticos.length) setTimeout(()=>toast('⚠️ '+criticos.length+' item(ns) crítico(s)!','warn'),900);
   }catch(e){ toast('Erro ao registrar','error'); console.error(e); }
+};
+
+function renderPedido(){
+  const el=document.getElementById('pedido-list');
+  if(!materiais.length){ el.innerHTML='<div class="empty"><div class="empty-icon">📦</div>Cadastre materiais primeiro.</div>'; return; }
+  const grupos={};
+  materiais.forEach(m=>{ const g=m.grupo||'Geral'; if(!grupos[g]) grupos[g]=[]; grupos[g].push(m); });
+  let html='';
+  Object.entries(grupos).forEach(([grupo,mats])=>{
+    html+=`<div class="mat-group-title">${grupo}</div>`;
+    html+='<div class="pedido-header"><span>Material</span><span>Estoque</span><span>Qtd a Pedir</span><span>R$/un</span></div>';
+    mats.forEach(m=>{
+      html+=`<div class="pedido-row">
+        <div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
+            <input type="checkbox" id="ped-chk-${m._id}" onchange="pedidoToggle('${m._id}')">
+            <span style="font-weight:600;font-size:13px">${m.nome}</span>
+          </label>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;padding-left:26px">${m.unidade}</div>
+        </div>
+        <div style="text-align:center;font-family:'DM Mono',monospace;font-size:13px;color:${m.estoque<=m.minimo?'var(--danger)':'var(--ok)'}">${m.estoque}<div style="font-size:9px;color:var(--muted)">mín: ${m.minimo}</div></div>
+        <input type="number" id="ped-qty-${m._id}" min="0" step="1" value="" placeholder="0" style="opacity:0.4;pointer-events:none" oninput="pedidoQtyChange('${m._id}')">
+        <div style="text-align:center;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">R$ ${m.custo.toFixed(2)}</div>
+      </div>`;
+    });
+  });
+  el.innerHTML=html;
+}
+
+window.pedidoToggle = function(id){
+  const chk=document.getElementById('ped-chk-'+id);
+  const qty=document.getElementById('ped-qty-'+id);
+  if(chk.checked){ qty.style.opacity='1'; qty.style.pointerEvents='auto'; qty.focus(); }
+  else { qty.style.opacity='0.4'; qty.style.pointerEvents='none'; qty.value=''; }
+};
+window.pedidoQtyChange = function(id){};
+
+window.gerarPedidoPDF = function(){
+  const itens=[];
+  materiais.forEach(m=>{
+    const chk=document.getElementById('ped-chk-'+m._id);
+    const qty=document.getElementById('ped-qty-'+m._id);
+    if(chk&&chk.checked){
+      const q=parseFloat(qty.value)||0;
+      itens.push({...m,qtdPedir:q});
+    }
+  });
+  if(!itens.length){ toast('Selecione ao menos um material','warn'); return; }
+
+  // agrupar por grupo
+  const grupos={};
+  itens.forEach(m=>{ const g=m.grupo||'Geral'; if(!grupos[g]) grupos[g]=[]; grupos[g].push(m); });
+
+  let gruposHTML='';
+  let totalGeral=0;
+  Object.entries(grupos).forEach(([grupo,mats])=>{
+    const rows=mats.map(m=>{
+      const subtotal=m.qtdPedir*m.custo;
+      totalGeral+=subtotal;
+      return `<tr><td><strong>${m.nome}</strong></td><td>${m.unidade}</td><td style="color:#c00;font-weight:700">${m.estoque}</td><td>${m.minimo}</td><td style="font-weight:700">${m.qtdPedir||'—'}</td><td>R$ ${m.custo.toFixed(2)}</td><td>${m.qtdPedir?'R$ '+subtotal.toFixed(2):'—'}</td></tr>`;
+    }).join('');
+    gruposHTML+=`<div class="pdf-section-title">${grupo}</div>
+    <table class="pdf-table"><thead><tr><th>Material</th><th>Unid.</th><th>Estoque</th><th>Mínimo</th><th>Qtd a Pedir</th><th>R$/un</th><th>Subtotal</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+  });
+
+  document.getElementById('print-area').innerHTML=`<div class="pdf-page">${pdfHeader('Pedido de Reposição de Materiais','Selecione os itens no site do fornecedor')}
+    <div class="pdf-highlight">📋 <strong>${itens.length}</strong> material(is) selecionado(s) &nbsp;|&nbsp; Valor estimado: <strong>R$ ${totalGeral.toFixed(2)}</strong></div>
+    ${gruposHTML}
+    <div class="pdf-footer">PalmStock · ${CLINIC.nome} · ${CLINIC.medicos} · Pedido gerado em ${nowStr()}</div>
+  </div>`;
+  setTimeout(()=>window.print(),150);
 };
 
 function renderDashboard(){
